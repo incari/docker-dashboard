@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    .modal { display: none; }
+    .modal.active { display: flex; }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 p-4">
+    <div class="container mx-auto flex justify-between items-center">
+      <h1 class="text-2xl font-bold flex items-center gap-2">
+        <i class="fab fa-docker text-blue-400"></i> Docker Dashboard
+      </h1>
+      <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2">
+        <i class="fas fa-plus"></i> Add Shortcut
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container mx-auto p-4">
+    <!-- Shortcuts Grid -->
+    <section class="mb-8">
+      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-bookmark text-yellow-400"></i> My Shortcuts
+      </h2>
+      <div id="shortcuts-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <!-- Shortcuts will be loaded here -->
+      </div>
+      <p id="no-shortcuts" class="text-gray-500 hidden">No shortcuts yet. Add one to get started!</p>
+    </section>
+
+    <!-- Running Containers -->
+    <section>
+      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-server text-green-400"></i> Running Containers
+      </h2>
+      <div id="containers-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- Containers will be loaded here -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal -->
+  <div id="modal" class="modal fixed inset-0 bg-black/50 items-center justify-center z-50 p-4">
+    <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md">
+      <h3 id="modal-title" class="text-xl font-bold mb-4">Add Shortcut</h3>
+      <form id="shortcut-form" class="space-y-4">
+        <input type="hidden" id="shortcut-id">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Name *</label>
+          <input type="text" id="shortcut-name" required class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Description</label>
+          <textarea id="shortcut-desc" rows="2" class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Icon</label>
+            <select id="shortcut-icon" class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="cube">📦 Cube</option>
+              <option value="server">🖥️ Server</option>
+              <option value="database">💾 Database</option>
+              <option value="cloud">☁️ Cloud</option>
+              <option value="code">💻 Code</option>
+              <option value="film">🎬 Media</option>
+              <option value="download">📥 Download</option>
+              <option value="home">🏠 Home</option>
+              <option value="shield">🛡️ Security</option>
+              <option value="chart">📊 Analytics</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Port *</label>
+            <input type="number" id="shortcut-port" required class="w-full bg-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+        </div>
+        <div class="flex gap-2 pt-4">
+          <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-semibold">Save</button>
+          <button type="button" onclick="closeModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded-lg font-semibold">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
