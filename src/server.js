@@ -10,6 +10,39 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
+// Validation helpers
+const normalizeUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+
+  url = url.trim();
+
+  // If it already has a protocol, return as is
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+
+  // Add https:// by default
+  return `https://${url}`;
+};
+
+const isValidUrl = (url) => {
+  if (!url) return false;
+
+  try {
+    const normalized = normalizeUrl(url);
+    const urlObj = new URL(normalized);
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const isValidPort = (port) => {
+  if (!port) return false;
+  const portNum = parseInt(port, 10);
+  return !isNaN(portNum) && portNum > 0 && portNum <= 65535;
+};
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -267,14 +300,32 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
     return res.status(400).json({ error: 'Name and either Port or URL are required' });
   }
 
-  // Determine the icon value: uploaded file path, or provided icon/url string, or default
+  // Validate port if provided
+  if (port && !isValidPort(port)) {
+    return res.status(400).json({ error: 'Invalid port number. Must be between 1 and 65535' });
+  }
+
+  // Validate and normalize URL if provided
+  let finalUrl = null;
+  if (url) {
+    if (!isValidUrl(url)) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+    finalUrl = normalizeUrl(url);
+  }
+
+  // Validate and normalize icon URL if it's a URL
   let iconValue = icon || 'cube';
   if (req.file) {
     iconValue = 'uploads/' + req.file.filename;
+  } else if (icon && icon.includes('http')) {
+    if (!isValidUrl(icon)) {
+      return res.status(400).json({ error: 'Invalid icon URL format' });
+    }
+    iconValue = normalizeUrl(icon);
   }
 
   const finalPort = port ? parseInt(port) : null;
-  const finalUrl = url || null;
   const finalFavorite = is_favorite === undefined ? 1 : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
   const finalUseTailscale = use_tailscale === 'true' || use_tailscale === true || use_tailscale === 1 ? 1 : 0;
 
@@ -295,13 +346,32 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
   const { id } = req.params;
   const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
 
+  // Validate port if provided
+  if (port && !isValidPort(port)) {
+    return res.status(400).json({ error: 'Invalid port number. Must be between 1 and 65535' });
+  }
+
+  // Validate and normalize URL if provided
+  let finalUrl = null;
+  if (url) {
+    if (!isValidUrl(url)) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+    finalUrl = normalizeUrl(url);
+  }
+
+  // Validate and normalize icon URL if it's a URL
   let iconValue = icon;
   if (req.file) {
     iconValue = 'uploads/' + req.file.filename;
+  } else if (icon && icon.includes('http')) {
+    if (!isValidUrl(icon)) {
+      return res.status(400).json({ error: 'Invalid icon URL format' });
+    }
+    iconValue = normalizeUrl(icon);
   }
 
   const finalPort = port ? parseInt(port) : null;
-  const finalUrl = url || null;
   const finalFavorite = is_favorite === undefined ? undefined : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
   const finalUseTailscale = use_tailscale === undefined ? undefined : (use_tailscale === 'true' || use_tailscale === true || use_tailscale === 1 ? 1 : 0);
 

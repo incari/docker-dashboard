@@ -35,11 +35,47 @@ import {
   Gamepad,
   Music,
   File,
-  Folder
+  Folder,
+  LayoutDashboard,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = '/api';
+
+// Validation and normalization helpers
+const normalizeUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+
+  // Trim whitespace
+  url = url.trim();
+
+  // If it already has a protocol, return as is
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+
+  // Add https:// by default
+  return `https://${url}`;
+};
+
+const isValidUrl = (url) => {
+  if (!url) return false;
+
+  try {
+    const normalized = normalizeUrl(url);
+    const urlObj = new URL(normalized);
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const isValidPort = (port) => {
+  if (!port) return false;
+  const portNum = parseInt(port, 10);
+  return !isNaN(portNum) && portNum > 0 && portNum <= 65535 && port.toString() === portNum.toString();
+};
 
 const ICONS = {
   cube: 'Box',
@@ -71,11 +107,39 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'danger' });
   const [tailscaleInfo, setTailscaleInfo] = useState({ available: false, ip: null });
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   useEffect(() => {
     fetchData();
     fetchTailscaleInfo();
+
+    // PWA Install Prompt
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallPrompt(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+      setShowInstallPrompt(false);
+    }
+
+    setDeferredPrompt(null);
+  };
 
   const fetchTailscaleInfo = async () => {
     try {
@@ -189,25 +253,37 @@ function App() {
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
       {/* Header */}
       <header className="bg-slate-900/50 backdrop-blur-md border-b border-white/5 sticky top-0 z-40">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Server className="w-5 h-5 text-white" />
+        <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-blue-600 p-1.5 sm:p-2 rounded-lg">
+              <img src="/dockericon.png" alt="Docker" className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-white">Docker<span className="text-blue-500">Dash</span></h1>
+            <h1 className="text-sm sm:text-base md:text-xl font-bold tracking-tight text-white">Docker<span className="text-blue-500">Dash</span></h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1 sm:gap-2 md:gap-4">
+            {showInstallPrompt && (
+              <button
+                onClick={handleInstallClick}
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white"
+                title="Install DockerDash"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden md:inline">Install</span>
+              </button>
+            )}
             <button
               onClick={() => setView('dashboard')}
-              className={`text-sm font-medium transition-colors ${view === 'dashboard' ? 'text-blue-400' : 'text-slate-400 hover:text-white'}`}
+              className={`flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg ${view === 'dashboard' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             >
-              Dashboard
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="hidden sm:inline">Dashboard</span>
             </button>
             <button
               onClick={() => setView('add')}
-              className={`text-sm font-medium transition-colors ${view === 'add' ? 'text-blue-400' : 'text-slate-400 hover:text-white'}`}
+              className={`flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium transition-colors px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg ${view === 'add' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             >
-              Management
+              <Layers className="w-4 h-4" />
+              <span className="hidden sm:inline">Management</span>
             </button>
           </div>
         </div>
@@ -232,9 +308,10 @@ function App() {
                 </div>
                 <button
                   onClick={() => { setEditingShortcut(null); setIsModalOpen(true); }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 font-medium"
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 font-medium"
                 >
-                  <Plus className="w-4 h-4" /> Add New
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden md:inline">Add New</span>
                 </button>
               </div>
 
@@ -253,7 +330,7 @@ function App() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {dashboardShortcuts.map(s => (
                     <ShortcutCard
                       key={s.id}
@@ -293,9 +370,10 @@ function App() {
                   </div>
                   <button
                     onClick={() => { setEditingShortcut(null); setIsModalOpen(true); }}
-                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 font-medium"
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 font-medium"
                   >
-                    <Plus className="w-4 h-4" /> Add Manual Link
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden md:inline">Add Manual Link</span>
                   </button>
                 </div>
 
@@ -304,7 +382,7 @@ function App() {
                     <p className="text-slate-500 text-sm">No manual shortcuts added yet.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {customShortcuts.map(s => (
                       <ShortcutCard
                         key={s.id}
@@ -329,7 +407,7 @@ function App() {
                   <p className="text-slate-400 text-sm mt-1">Running instances detected on this host.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {containers.map(c => {
                     const existing = shortcuts.find(s => s.container_id === c.id);
                     return (
@@ -475,14 +553,14 @@ function ShortcutCard({ shortcut, container, tailscaleIP, onEdit, onDelete, onSt
   };
 
   return (
-    <div className="group relative bg-slate-900/60 border border-white/5 hover:border-blue-500/30 rounded-3xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/5 h-full flex flex-col">
+    <div className="group relative bg-slate-900/60 border border-white/5 hover:border-blue-500/30 rounded-3xl p-4 md:p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/5 h-full flex flex-col">
       <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className="w-10 h-10 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
             {renderIcon()}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-white font-bold text-lg truncate leading-tight group-hover:text-blue-400 transition-colors uppercase">{shortcut.name}</h3>
+            <h3 className="text-white font-bold text-sm md:text-lg truncate leading-tight group-hover:text-blue-400 transition-colors uppercase">{shortcut.name}</h3>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded border border-white/5 tracking-wider uppercase">
                 {subtitle}
@@ -666,6 +744,28 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validation
+    if (formData.type === 'port') {
+      if (!isValidPort(formData.port)) {
+        alert('Please enter a valid port number (1-65535)');
+        return;
+      }
+    } else {
+      if (!isValidUrl(formData.url)) {
+        alert('Please enter a valid URL (e.g., example.com, www.example.com, https://example.com)');
+        return;
+      }
+    }
+
+    // Validate image URL if using URL tab
+    if (activeTab === 'url' && formData.icon) {
+      if (!isValidUrl(formData.icon)) {
+        alert('Please enter a valid image URL');
+        return;
+      }
+    }
+
     const data = new FormData();
     data.append('name', formData.name);
     data.append('description', formData.description);
@@ -674,11 +774,12 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
       data.append('port', formData.port);
       data.append('use_tailscale', formData.use_tailscale);
     } else {
-      data.append('url', formData.url);
+      // Normalize URL before sending
+      data.append('url', normalizeUrl(formData.url));
     }
 
     if (activeTab === 'icon') data.append('icon', formData.icon);
-    else if (activeTab === 'url') data.append('icon', formData.url); // Use image URL
+    else if (activeTab === 'url') data.append('icon', normalizeUrl(formData.icon)); // Normalize image URL
     else if (activeTab === 'upload' && selectedFile) data.append('image', selectedFile);
     else if (shortcut) data.append('icon', shortcut.icon);
 
@@ -692,7 +793,9 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
       }
       onSave();
       onClose();
-    } catch (err) { alert('Error saving shortcut'); }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error saving shortcut');
+    }
   };
 
   return (
@@ -781,11 +884,19 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
             </label>
             <input
               required
+              type={formData.type === 'port' ? 'number' : 'text'}
+              min={formData.type === 'port' ? '1' : undefined}
+              max={formData.type === 'port' ? '65535' : undefined}
               value={formData.type === 'port' ? formData.port : formData.url}
               onChange={e => setFormData({ ...formData, [formData.type]: e.target.value })}
-              placeholder={formData.type === 'port' ? '8080' : 'https://myapp.com'}
+              placeholder={formData.type === 'port' ? '8080' : 'example.com or https://example.com'}
               className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
             />
+            {formData.type === 'url' && (
+              <p className="text-xs text-slate-500 pl-1">
+                Supports: example.com, www.example.com, http://example.com, https://example.com
+              </p>
+            )}
           </div>
 
           {/* Tailscale Toggle - Only show for port mode */}
