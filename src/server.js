@@ -129,19 +129,10 @@ if (fs.existsSync(frontendPath)) {
 // Serve the uploads directory at /uploads
 app.use('/uploads', express.static(uploadDir));
 
-// For any other request, serve index.html (React proxy)
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
-    return next();
-  }
-  if (fs.existsSync(path.join(frontendPath, 'index.html'))) {
-    res.sendFile(path.join(frontendPath, 'index.html'));
-  } else {
-    // If frontend dist doesn't exist (dev mode), just 404 or send a basic message
-    res.status(404).send('Frontend not built. Run npm run dev and use the Vite server during development.');
-  }
-});
+// Health check for Docker
+app.get('/health', (req, res) => res.status(200).send('OK'));
 
+// API Routes
 // Get all Docker containers with their ports
 app.get('/api/containers', async (req, res) => {
   try {
@@ -167,6 +158,7 @@ app.get('/api/containers', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch containers' });
   }
 });
+
 
 // Start a container
 app.post('/api/containers/:id/start', async (req, res) => {
@@ -301,6 +293,20 @@ app.delete('/api/shortcuts/:id', (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete shortcut' });
+  }
+});
+
+// For any other request, serve index.html (React proxy)
+app.get('*', (req, res, next) => {
+  // If it's an API request that didn't match anything above, 404 it
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+    return res.status(404).json({ error: 'Endpoint not found' });
+  }
+
+  if (fs.existsSync(path.join(frontendPath, 'index.html'))) {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  } else {
+    res.status(404).send('Frontend not built. Run npm run build.');
   }
 });
 
