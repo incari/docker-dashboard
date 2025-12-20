@@ -145,19 +145,22 @@ app.get('*', (req, res, next) => {
 // Get all Docker containers with their ports
 app.get('/api/containers', async (req, res) => {
   try {
-    const containers = await docker.listContainers({ all: true });
-    const formatted = containers.map(c => ({
-      id: c.Id,
-      name: c.Names[0]?.replace('/', '') || 'unknown',
-      image: c.Image,
-      state: c.State, // 'running', 'exited', etc.
-      status: c.Status,
-      ports: (c.Ports || []).map(p => ({
-        private: p.PrivatePort,
-        public: p.PublicPort,
-        type: p.Type
-      })).filter(p => p.public)
-    }));
+    const containers = (await docker.listContainers({ all: true })) || [];
+    const formatted = containers.map(c => {
+      if (!c) return null;
+      return {
+        id: c.Id,
+        name: (c.Names && c.Names[0]) ? c.Names[0].replace('/', '') : 'unknown',
+        image: c.Image,
+        state: c.State,
+        status: c.Status,
+        ports: (c.Ports || []).map(p => ({
+          private: p?.PrivatePort,
+          public: p?.PublicPort,
+          type: p?.Type
+        })).filter(p => p && p.public)
+      };
+    }).filter(Boolean);
     res.json(formatted);
   } catch (error) {
     console.error('Error fetching containers:', error);
