@@ -3,7 +3,7 @@ services:
     build:
       context: https://github.com/incari/docker-dashboard.git
       dockerfile: Dockerfile
-    image: docker-dashboard:latest
+    image: local/docker-dashboard:latest
     container_name: docker-dashboard
     restart: unless-stopped
     ports:
