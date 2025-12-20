@@ -15,7 +15,7 @@ RUN pnpm build
 # IMPORTANT: Use Node 22 (LTS). Node 24 is unstable for native modules like better-sqlite3.
 FROM node:22-alpine
 
-# Install build-base for native module compilation (keep these for runtime)
+# Install build-base for native module compilation
 RUN apk add --no-cache build-base python3
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
@@ -25,14 +25,11 @@ COPY package*.json ./
 # Force better-sqlite3 to compile from source inside the container
 ENV npm_config_build_from_source=true
 
-# Install ALL dependencies first (including devDependencies for building native modules)
-RUN pnpm install --shamefully-hoist
+# Install production dependencies only
+RUN pnpm install --prod --shamefully-hoist
 
-# Rebuild better-sqlite3 to ensure it's compiled for Alpine Linux
-RUN pnpm rebuild better-sqlite3
-
-# Remove devDependencies after building native modules
-RUN pnpm prune --prod
+# Explicitly rebuild better-sqlite3 for Alpine Linux (this compiles the native module)
+RUN cd node_modules/better-sqlite3 && npm run build-release
 
 # Copy backend source
 COPY src ./src

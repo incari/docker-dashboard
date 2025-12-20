@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  docker-dashboard:
+    build:
+      context: https://github.com/incari/docker-dashboard.git
+      dockerfile: Dockerfile
+    image: docker-dashboard:latest
+    container_name: docker-dashboard
+    restart: unless-stopped
+    ports:
+      - "3080:3000"
+    volumes:
+      # Mount Docker socket for container access
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Persistent data storage (Unraid path)
+      - /mnt/user/appdata/docker-dashboard:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/app/data/dashboard.db
+    networks:
+      - docker-dashboard-net
+
+networks:
+  docker-dashboard-net:
+    driver: bridge
+
