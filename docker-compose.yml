@@ -6,8 +6,24 @@ services:
     image: local/docker-dashboard:latest
     container_name: docker-dashboard
     restart: unless-stopped
+
+    # ============================================
+    # TAILSCALE CONFIGURATION
+    # ============================================
+    # For Tailscale detection on Unraid/Linux hosts:
+    # 1. Comment out 'ports' and 'networks' below
+    # 2. Uncomment 'network_mode: host'
+    # 3. App will be available at http://HOST_IP:3000
+
+    # Option 1: Host Network (for Tailscale detection)
+    # network_mode: host
+
+    # Option 2: Bridge Network (standard setup, no Tailscale)
     ports:
       - "3080:3000"
+    networks:
+      - docker-dashboard-net
+
     volumes:
       # Mount Docker socket for container access
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -18,8 +34,6 @@ services:
       - PORT=3000
       - DB_PATH=/app/data/dashboard.db
       - UPLOAD_DIR=/app/data/images
-    networks:
-      - docker-dashboard-net
 
 networks:
   docker-dashboard-net:

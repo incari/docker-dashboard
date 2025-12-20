@@ -180,10 +180,11 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 // Helper function to detect Tailscale IP
 async function getTailscaleIP() {
   try {
-    // Try to get Tailscale IP using 'tailscale ip' command
+    // Method 1: Try to get Tailscale IP using 'tailscale ip' command
     const { stdout } = await execAsync('tailscale ip -4 2>/dev/null');
     const ip = stdout.trim();
     if (ip && /^100\.\d+\.\d+\.\d+$/.test(ip)) {
+      console.log('Tailscale IP detected via command:', ip);
       return ip;
     }
   } catch (err) {
@@ -191,16 +192,48 @@ async function getTailscaleIP() {
   }
 
   try {
-    // Fallback: Check network interfaces for Tailscale IP (100.x.x.x range)
+    // Method 2: Check network interfaces for Tailscale IP (100.x.x.x range)
     const { stdout } = await execAsync('ip addr show 2>/dev/null || ifconfig 2>/dev/null');
     const match = stdout.match(/inet (100\.\d+\.\d+\.\d+)/);
     if (match) {
+      console.log('Tailscale IP detected via network interface:', match[1]);
       return match[1];
     }
   } catch (err) {
     // Network command failed
   }
 
+  try {
+    // Method 3: For Docker containers on Unraid - check host network
+    // Try to detect if we're in a Docker container with host network mode
+    const { stdout } = await execAsync('hostname -I 2>/dev/null');
+    const ips = stdout.trim().split(/\s+/);
+    const tailscaleIP = ips.find(ip => /^100\.\d+\.\d+\.\d+$/.test(ip));
+    if (tailscaleIP) {
+      console.log('Tailscale IP detected via hostname -I:', tailscaleIP);
+      return tailscaleIP;
+    }
+  } catch (err) {
+    // hostname command failed
+  }
+
+  try {
+    // Method 4: Check /proc/net/fib_trie for Tailscale IPs (works in containers)
+    const { stdout } = await execAsync('cat /proc/net/fib_trie 2>/dev/null');
+    const matches = stdout.match(/100\.\d+\.\d+\.\d+/g);
+    if (matches && matches.length > 0) {
+      // Filter out broadcast addresses (ending in .255)
+      const validIP = matches.find(ip => !ip.endsWith('.255') && !ip.endsWith('.0'));
+      if (validIP) {
+        console.log('Tailscale IP detected via /proc/net/fib_trie:', validIP);
+        return validIP;
+      }
+    }
+  } catch (err) {
+    // /proc/net/fib_trie not available
+  }
+
+  console.log('No Tailscale IP detected');
   return null;
 }
 
@@ -296,8 +329,13 @@ app.get('/api/shortcuts', (req, res) => {
 app.post('/api/shortcuts', upload.single('image'), (req, res) => {
   const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
 
-  if (!name || (!port && !url)) {
-    return res.status(400).json({ error: 'Name and either Port or URL are required' });
+  if (!name) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+
+  // At least one of port or url should be provided (but port can be empty for containers without ports)
+  if (!port && !url && !container_id) {
+    return res.status(400).json({ error: 'Either Port, URL, or Container must be specified' });
   }
 
   // Validate port if provided

@@ -9,7 +9,6 @@ import {
   RefreshCw,
   ExternalLink,
   Star,
-  Check,
   ArrowLeft,
   Server,
   AlertTriangle,
@@ -19,7 +18,6 @@ import {
   Image as ImageIcon,
   CheckCircle,
   X,
-  Edit2,
   Box,
   Database,
   Cloud,
@@ -28,7 +26,6 @@ import {
   Download,
   Home,
   Shield,
-  LineChart,
   Globe,
   Terminal,
   Bug,
@@ -37,7 +34,34 @@ import {
   File,
   Folder,
   LayoutDashboard,
-  Layers
+  Layers,
+  Video,
+  Wifi,
+  Lock,
+  HardDrive,
+  Activity,
+  Bell,
+  Mail,
+  Calendar,
+  Book,
+  Camera,
+  Zap,
+  Network,
+  Cpu,
+  Radio,
+  Tv,
+  Headphones,
+  Rss,
+  Archive,
+  Key,
+  Users,
+  MessageSquare,
+  Search,
+  Wrench,
+  Package,
+  Smartphone,
+  Monitor,
+  Gauge
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -78,24 +102,54 @@ const isValidPort = (port) => {
 };
 
 const ICONS = {
-  cube: 'Box',
-  server: 'Server',
-  database: 'Database',
-  cloud: 'Cloud',
-  code: 'Code',
-  film: 'Film',
-  download: 'Download',
-  home: 'Home',
-  shield: 'Shield',
-  chart: 'LineChart',
-  globe: 'Globe',
-  terminal: 'Terminal',
-  bug: 'Bug',
-  gamepad: 'Gamepad',
-  music: 'Music',
-  image: 'ImageIcon',
-  file: 'File',
-  folder: 'Folder'
+  // Infrastructure & System
+  Server: 'Server',
+  Database: 'Database',
+  HardDrive: 'HardDrive',
+  Cpu: 'Cpu',
+  Network: 'Network',
+
+  // Media & Entertainment
+  Video: 'Video',
+  Film: 'Film',
+  Tv: 'Tv',
+  Music: 'Music',
+  Camera: 'Camera',
+
+  // Networking & Security
+  Wifi: 'Wifi',
+  Globe: 'Globe',
+  Lock: 'Lock',
+  Shield: 'Shield',
+
+  // Automation & Monitoring
+  Zap: 'Zap',
+  Bell: 'Bell',
+  Activity: 'Activity',
+  Gauge: 'Gauge',
+
+  // Communication
+  Mail: 'Mail',
+  MessageSquare: 'MessageSquare',
+  Users: 'Users',
+
+  // Productivity & Files
+  Calendar: 'Calendar',
+  Book: 'Book',
+  Folder: 'Folder',
+  Archive: 'Archive',
+
+  // Development
+  Code: 'Code',
+  Terminal: 'Terminal',
+  Package: 'Package',
+
+  // General
+  Home: 'Home',
+  Cloud: 'Cloud',
+  Download: 'Download',
+  Wrench: 'Wrench',
+  Gamepad: 'Gamepad'
 };
 
 function App() {
@@ -106,6 +160,7 @@ function App() {
   const [editingShortcut, setEditingShortcut] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'danger' });
+  const [errorModal, setErrorModal] = useState({ isOpen: false, title: '', message: '' });
   const [tailscaleInfo, setTailscaleInfo] = useState({ available: false, ip: null });
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
@@ -222,7 +277,7 @@ function App() {
     formData.append('name', container.name);
     formData.append('port', port);
     formData.append('container_id', container.id);
-    formData.append('icon', 'cube');
+    formData.append('icon', 'Server');
     formData.append('description', 'Quick added container');
 
     try {
@@ -424,7 +479,7 @@ function App() {
                             name: c.name,
                             port: ports[0] || '',
                             container_id: c.id,
-                            icon: 'cube',
+                            icon: 'Server',
                             description: ''
                           });
                         }}
@@ -448,11 +503,17 @@ function App() {
         shortcut={editingShortcut}
         containers={containers}
         tailscaleInfo={tailscaleInfo}
+        onError={(title, message) => setErrorModal({ isOpen: true, title, message })}
       />
 
       <ConfirmModal
         {...confirmModal}
         onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      <ErrorModal
+        {...errorModal}
+        onClose={() => setErrorModal({ isOpen: false, title: '', message: '' })}
       />
     </div>
   );
@@ -503,25 +564,106 @@ function ConfirmModal({ isOpen, title, message, onConfirm, onClose, type = 'dang
   );
 }
 
+// Error Modal - simpler version without confirm button
+function ErrorModal({ isOpen, title, message, onClose }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-slate-950/90 backdrop-blur-md"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="relative bg-slate-900 border border-red-500/20 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
+      >
+        <div className="p-8 text-center">
+          <div className="w-16 h-16 rounded-2xl mx-auto mb-6 flex items-center justify-center bg-red-500/10 text-red-500">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
+          <p className="text-slate-400 leading-relaxed whitespace-pre-line">{message}</p>
+        </div>
+
+        <div className="p-6 bg-slate-800/50">
+          <button
+            onClick={onClose}
+            className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold transition-colors shadow-lg shadow-red-500/20"
+          >
+            OK
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 const ICON_COMPONENTS = {
-  Box,
+  // Infrastructure & System
   Server,
   Database,
-  Cloud,
-  Code,
+  HardDrive,
+  Cpu,
+  Network,
+  Activity,
+  Gauge,
+
+  // Media & Entertainment
+  Video,
   Film,
-  Download,
-  Home,
-  Shield,
-  LineChart,
+  Tv,
+  Music,
+  Headphones,
+  Radio,
+  Camera,
+  ImageIcon,
+
+  // Networking & Security
+  Wifi,
   Globe,
+  Lock,
+  Shield,
+  Key,
+
+  // Automation & Monitoring
+  Zap,
+  Bell,
+  Rss,
+
+  // Communication
+  Mail,
+  MessageSquare,
+  Users,
+
+  // Productivity
+  Calendar,
+  Book,
+  File,
+  Folder,
+  Archive,
+  Search,
+
+  // Development
+  Code,
   Terminal,
   Bug,
+  Package,
+
+  // General
+  Home,
+  Cloud,
+  Download,
+  Wrench,
   Gamepad,
-  Music,
-  ImageIcon,
-  File,
-  Folder
+  Smartphone,
+  Monitor,
+  Box
 };
 
 const DynamicIcon = ({ name, className }) => {
@@ -533,92 +675,127 @@ function ShortcutCard({ shortcut, container, tailscaleIP, onEdit, onDelete, onSt
   const isRunning = container?.state === 'running';
 
   // Determine the link based on use_tailscale setting
-  let link;
+  let link = null;
+  let subtitle = 'No Link';
+
   if (shortcut.url) {
     link = shortcut.url;
-  } else if (shortcut.use_tailscale && tailscaleIP) {
-    link = `http://${tailscaleIP}:${shortcut.port}`;
-  } else {
-    link = `http://${window.location.hostname}:${shortcut.port}`;
+    subtitle = 'Custom URL';
+  } else if (shortcut.port) {
+    if (shortcut.use_tailscale && tailscaleIP) {
+      link = `http://${tailscaleIP}:${shortcut.port}`;
+      subtitle = `Tailscale :${shortcut.port}`;
+    } else {
+      link = `http://${window.location.hostname}:${shortcut.port}`;
+      subtitle = `Port :${shortcut.port}`;
+    }
+  } else if (container) {
+    subtitle = 'Container Only';
   }
-
-  const subtitle = shortcut.url ? 'Custom URL' : (shortcut.use_tailscale && tailscaleIP ? `Tailscale :${shortcut.port}` : `Port :${shortcut.port}`);
 
   const renderIcon = () => {
     if (shortcut.icon && (shortcut.icon.startsWith('http') || shortcut.icon.includes('/'))) {
       const src = shortcut.icon.startsWith('http') ? shortcut.icon : `/${shortcut.icon}`;
-      return <img src={src} alt={shortcut.name} className="w-10 h-10 object-cover rounded-lg group-hover:scale-110 transition-transform duration-500" />;
+      return <img src={src} alt={shortcut.name} className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded-lg group-hover:scale-110 transition-transform duration-500" />;
     }
-    return <DynamicIcon name={shortcut.icon} className="w-6 h-6 text-blue-400 group-hover:scale-110 transition-transform duration-500" />;
+    return <DynamicIcon name={shortcut.icon} className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 transition-transform duration-500" />;
+  };
+
+  const handleCardClick = () => {
+    if (link) {
+      window.open(link, '_blank');
+    }
   };
 
   return (
-    <div className="group relative bg-slate-900/60 border border-white/5 hover:border-blue-500/30 rounded-3xl p-4 md:p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/5 h-full flex flex-col">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3 md:gap-4">
-          <div className="w-10 h-10 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
-            {renderIcon()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-white font-bold text-sm md:text-lg truncate leading-tight group-hover:text-blue-400 transition-colors uppercase">{shortcut.name}</h3>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded border border-white/5 tracking-wider uppercase">
-                {subtitle}
-              </span>
-              {container && (
-                <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
-              )}
-            </div>
+    <div
+      onClick={handleCardClick}
+      className={`group relative bg-slate-900/60 border border-white/5 hover:border-blue-500/30 rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/5 h-full flex flex-col ${link ? 'cursor-pointer' : 'cursor-default'}`}
+    >
+      {/* Header with Icon, Title, and Star */}
+      <div className="flex items-start gap-2 sm:gap-3 mb-3 sm:mb-4">
+        {/* Icon */}
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
+          {renderIcon()}
+        </div>
+
+        {/* Title and Subtitle */}
+        <div className="min-w-0 flex-1">
+          <h3 className="text-white font-bold text-xs sm:text-sm md:text-lg leading-tight group-hover:text-blue-400 transition-colors uppercase line-clamp-2">{shortcut.name}</h3>
+          <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
+            <span className="text-[9px] sm:text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 sm:px-2 py-0.5 rounded border border-white/5 tracking-wider uppercase truncate">
+              {subtitle}
+            </span>
+            {container && (
+              <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
+            )}
           </div>
         </div>
+
+        {/* Favorite Star - Always Visible */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+          className={`p-1 sm:p-2 transition-colors shrink-0 ${shortcut.is_favorite ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-500 hover:text-yellow-400'}`}
+          title={shortcut.is_favorite ? "Remove from Favorites" : "Add to Favorites"}
+        >
+          <Star className={`w-4 h-4 sm:w-5 sm:h-5 ${shortcut.is_favorite ? 'fill-current' : ''}`} />
+        </button>
       </div>
 
-      <p className="text-slate-400 text-sm leading-relaxed line-clamp-2 mb-6 flex-1">
+      {/* Description - Hidden on very small screens */}
+      <p className="hidden sm:block text-slate-400 text-xs sm:text-sm leading-relaxed line-clamp-2 mb-4 sm:mb-6 flex-1">
         {shortcut.description || 'Quickly access and manage this container instance.'}
       </p>
 
-      <div className="flex items-center justify-between gap-3 mt-auto">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => window.open(link, '_blank')}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95"
-          >
-            <ExternalLink className="w-3.5 h-3.5" /> Launch
-          </button>
-
+      {/* Action Buttons */}
+      <div className="flex items-center justify-between gap-2 mt-auto">
+        <div className="flex items-center gap-1 sm:gap-2">
           {container && (
             <div className="flex gap-1">
               {isRunning ? (
                 <>
-                  <button onClick={onStop} className="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/10">
-                    <Square className="w-3.5 h-3.5" fill="currentColor" />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onStop(); }}
+                    className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/10"
+                    title="Stop Container"
+                  >
+                    <Square className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="currentColor" />
                   </button>
-                  <button onClick={onRestart} className="p-2 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all border border-yellow-500/10 shadow-lg shadow-yellow-500/10">
-                    <RefreshCw className="w-3.5 h-3.5" />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRestart(); }}
+                    className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all border border-yellow-500/10"
+                    title="Restart Container"
+                  >
+                    <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   </button>
                 </>
               ) : (
-                <button onClick={onStart} className="p-2 rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/10">
-                  <Play className="w-3.5 h-3.5" fill="currentColor" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); onStart(); }}
+                  className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/10"
+                  title="Start Container"
+                >
+                  <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="currentColor" />
                 </button>
               )}
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 sm:gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
-            className={`p-2 transition-colors ${shortcut.is_favorite ? 'text-accent hover:text-accent/80' : 'text-slate-500 hover:text-white'}`}
-            title={shortcut.is_favorite ? "Remove from Favorites" : "Add to Favorites"}
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="p-1.5 sm:p-2 text-slate-500 hover:text-white transition-colors"
+            title="Edit Shortcut"
           >
-            <Star className={`w-4 h-4 ${shortcut.is_favorite ? 'fill-current' : ''}`} />
+            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
-          <button onClick={onEdit} className="p-2 text-slate-500 hover:text-white transition-colors">
-            <Settings className="w-4 h-4" />
-          </button>
-          <button onClick={onDelete} className="p-2 text-slate-500 hover:text-red-400 transition-colors">
-            <Trash2 className="w-4 h-4" />
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="p-1.5 sm:p-2 text-slate-500 hover:text-red-400 transition-colors"
+            title="Delete Shortcut"
+          >
+            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>
@@ -635,8 +812,8 @@ function ContainerCard({ container, isAdded, isFavorite, onQuickAdd, onToggleFav
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className={`w-3 h-3 rounded-full shrink-0 ${isRunning ? 'bg-green-500 shadow-[0_0_12px_rgba(22,163,74,0.4)]' : 'bg-slate-600'}`} />
-          <div className="min-w-0">
-            <h3 className="text-white font-bold truncate">{container.name}</h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-white font-bold line-clamp-2 leading-tight">{container.name}</h3>
             <p className="text-[10px] text-slate-500 font-mono truncate mt-0.5 opacity-60">{container.image}</p>
           </div>
         </div>
@@ -653,6 +830,17 @@ function ContainerCard({ container, isAdded, isFavorite, onQuickAdd, onToggleFav
 
       <div className="mt-auto flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
+          {/* Launch button - only show if container has ports */}
+          {ports.length > 0 && (
+            <button
+              onClick={() => window.open(`http://${window.location.hostname}:${ports[0]}`, '_blank')}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95"
+              title="Launch"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Launch
+            </button>
+          )}
+
           {isRunning ? (
             <button
               onClick={onStop}
@@ -703,13 +891,13 @@ function ContainerCard({ container, isAdded, isFavorite, onQuickAdd, onToggleFav
   );
 }
 
-function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscaleInfo }) {
+function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscaleInfo, onError }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     port: '',
     url: '',
-    icon: 'cube',
+    icon: 'Server',
     container_id: '',
     type: 'port', // or 'url'
     use_tailscale: false
@@ -724,7 +912,7 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
         description: shortcut.description || '',
         port: shortcut.port || '',
         url: shortcut.url || '',
-        icon: shortcut.icon || 'cube',
+        icon: shortcut.icon || 'Server',
         container_id: shortcut.container_id || '',
         type: shortcut.url ? 'url' : 'port',
         use_tailscale: shortcut.use_tailscale === 1 || shortcut.use_tailscale === true
@@ -734,7 +922,7 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
       else setActiveTab('icon');
     } else {
       setFormData({
-        name: '', description: '', port: '', url: '', icon: 'cube', container_id: '', type: 'port', use_tailscale: false
+        name: '', description: '', port: '', url: '', icon: 'Server', container_id: '', type: 'port', use_tailscale: false
       });
       setActiveTab('icon');
     }
@@ -747,13 +935,15 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
 
     // Validation
     if (formData.type === 'port') {
-      if (!isValidPort(formData.port)) {
-        alert('Please enter a valid port number (1-65535)');
+      // Port is optional for containers that don't expose ports
+      if (formData.port && !isValidPort(formData.port)) {
+        onError('Invalid Port Number', 'Please enter a valid port number between 1 and 65535.\n\nNote: Port is optional for containers that don\'t expose any ports.');
         return;
       }
     } else {
-      if (!isValidUrl(formData.url)) {
-        alert('Please enter a valid URL (e.g., example.com, www.example.com, https://example.com)');
+      // URL is required for URL-type shortcuts
+      if (!formData.url || !isValidUrl(formData.url)) {
+        onError('Invalid URL', 'Please enter a valid URL.\n\nSupported formats:\n• example.com\n• www.example.com\n• http://example.com\n• https://example.com');
         return;
       }
     }
@@ -761,7 +951,7 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
     // Validate image URL if using URL tab
     if (activeTab === 'url' && formData.icon) {
       if (!isValidUrl(formData.icon)) {
-        alert('Please enter a valid image URL');
+        onError('Invalid Image URL', 'Please enter a valid image URL.\n\nExample: https://example.com/image.png');
         return;
       }
     }
@@ -771,7 +961,10 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
     data.append('description', formData.description);
 
     if (formData.type === 'port') {
-      data.append('port', formData.port);
+      // Only add port if it's provided
+      if (formData.port) {
+        data.append('port', formData.port);
+      }
       data.append('use_tailscale', formData.use_tailscale);
     } else {
       // Normalize URL before sending
@@ -794,7 +987,8 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
       onSave();
       onClose();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error saving shortcut');
+      const errorMessage = err.response?.data?.error || 'An unexpected error occurred while saving the shortcut.';
+      onError('Error Saving Shortcut', errorMessage);
     }
   };
 
@@ -881,17 +1075,25 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-300">
               {formData.type === 'port' ? 'Port Number' : 'Target URL'}
+              {formData.type === 'port' && (
+                <span className="text-xs text-slate-500 font-normal ml-2">(Optional)</span>
+              )}
             </label>
             <input
-              required
+              required={formData.type === 'url'}
               type={formData.type === 'port' ? 'number' : 'text'}
               min={formData.type === 'port' ? '1' : undefined}
               max={formData.type === 'port' ? '65535' : undefined}
               value={formData.type === 'port' ? formData.port : formData.url}
               onChange={e => setFormData({ ...formData, [formData.type]: e.target.value })}
-              placeholder={formData.type === 'port' ? '8080' : 'example.com or https://example.com'}
+              placeholder={formData.type === 'port' ? '8080 (leave empty if no port)' : 'example.com or https://example.com'}
               className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
             />
+            {formData.type === 'port' && (
+              <p className="text-xs text-slate-500 pl-1">
+                Leave empty for containers that don't expose ports
+              </p>
+            )}
             {formData.type === 'url' && (
               <p className="text-xs text-slate-500 pl-1">
                 Supports: example.com, www.example.com, http://example.com, https://example.com
@@ -961,15 +1163,15 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
 
             <div className="bg-slate-950/50 rounded-2xl p-6 border border-white/5 min-h-32 flex items-center justify-center">
               {activeTab === 'icon' && (
-                <div className="grid grid-cols-6 gap-3">
+                <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 sm:gap-3 w-full">
                   {Object.keys(ICONS).map(iconKey => (
                     <button
                       key={iconKey}
                       type="button"
                       onClick={() => setFormData({ ...formData, icon: iconKey })}
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${formData.icon === iconKey ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-800 text-slate-500 hover:bg-slate-700'}`}
+                      className={`aspect-square rounded-xl flex items-center justify-center transition-all ${formData.icon === iconKey ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-white'}`}
                     >
-                      <DynamicIcon name={iconKey} className="w-5 h-5" />
+                      <DynamicIcon name={iconKey} className="w-5 h-5 sm:w-6 sm:h-6" />
                     </button>
                   ))}
                 </div>
