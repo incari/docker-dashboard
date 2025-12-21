@@ -101,6 +101,12 @@ const isValidPort = (port) => {
   return !isNaN(portNum) && portNum > 0 && portNum <= 65535 && port.toString() === portNum.toString();
 };
 
+// Clean description: trim and remove double spaces
+const cleanDescription = (desc) => {
+  if (!desc || typeof desc !== 'string') return '';
+  return desc.trim().replace(/\s+/g, ' ');
+};
+
 const ICONS = {
   // Infrastructure & System
   Server: 'Server',
@@ -271,21 +277,31 @@ function App() {
 
   const handleQuickAdd = async (container) => {
     const ports = container.ports.map(p => p.public).filter(Boolean);
-    const port = ports[0] || 0;
+    const port = ports[0] || '';  // Empty string instead of 0 for containers without ports
 
     const formData = new FormData();
     formData.append('name', container.name);
-    formData.append('port', port);
+    if (port) {
+      formData.append('port', port);  // Only add port if it exists
+    }
     formData.append('container_id', container.id);
     formData.append('icon', 'Server');
-    formData.append('description', 'Quick added container');
+    // Only add description if it exists and is not empty
+    if (container.description && container.description.trim()) {
+      formData.append('description', container.description.trim());
+    }
 
     try {
       await axios.post(`${API_BASE}/shortcuts`, formData);
       fetchData();
     } catch (err) {
       console.error(err);
-      alert('Failed to add shortcut');
+      const errorMessage = err.response?.data?.error || 'Failed to add shortcut';
+      setErrorModal({
+        isOpen: true,
+        title: 'Error Adding Shortcut',
+        message: errorMessage
+      });
     }
   };
 
@@ -309,12 +325,15 @@ function App() {
       {/* Header */}
       <header className="bg-slate-900/50 backdrop-blur-md border-b border-white/5 sticky top-0 z-40">
         <div className="container mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={() => setView('dashboard')}
+            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+          >
             <div className="bg-blue-600 p-1.5 sm:p-2 rounded-lg">
               <img src="/dockericon.png" alt="Docker" className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <h1 className="text-sm sm:text-base md:text-xl font-bold tracking-tight text-white">Docker<span className="text-blue-500">Dash</span></h1>
-          </div>
+          </button>
           <div className="flex items-center gap-1 sm:gap-2 md:gap-4">
             {showInstallPrompt && (
               <button
@@ -354,21 +373,7 @@ function App() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-8"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                    <Bookmark className="text-blue-500 w-6 h-6" /> My Shortcuts
-                  </h2>
-                  <p className="text-slate-400 text-sm mt-1">Quick access to your running services.</p>
-                </div>
-                <button
-                  onClick={() => { setEditingShortcut(null); setIsModalOpen(true); }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden md:inline">Add New</span>
-                </button>
-              </div>
+
 
               {dashboardShortcuts.length === 0 && !loading ? (
                 <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-3xl bg-white/[0.02]">
@@ -693,10 +698,16 @@ function ShortcutCard({ shortcut, container, tailscaleIP, onEdit, onDelete, onSt
     subtitle = 'Container Only';
   }
 
-  const renderIcon = () => {
+  const renderIcon = (isMobileHero = false) => {
     if (shortcut.icon && (shortcut.icon.startsWith('http') || shortcut.icon.includes('/'))) {
       const src = shortcut.icon.startsWith('http') ? shortcut.icon : `/${shortcut.icon}`;
+      if (isMobileHero) {
+        return <img src={src} alt={shortcut.name} className="w-full h-full object-cover" />;
+      }
       return <img src={src} alt={shortcut.name} className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded-lg group-hover:scale-110 transition-transform duration-500" />;
+    }
+    if (isMobileHero) {
+      return <DynamicIcon name={shortcut.icon} className="w-full h-full text-blue-400" />;
     }
     return <DynamicIcon name={shortcut.icon} className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 group-hover:scale-110 transition-transform duration-500" />;
   };
@@ -710,20 +721,55 @@ function ShortcutCard({ shortcut, container, tailscaleIP, onEdit, onDelete, onSt
   return (
     <div
       onClick={handleCardClick}
-      className={`group relative bg-slate-900/60 border border-white/5 hover:border-blue-500/30 rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/5 h-full flex flex-col ${link ? 'cursor-pointer' : 'cursor-default'}`}
+      className={`group relative bg-slate-900/60 border border-white/5 hover:border-blue-500/30 rounded-2xl sm:rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/5 h-full flex flex-col ${link ? 'cursor-pointer' : 'cursor-default'}`}
     >
-      {/* Header with Icon, Title, and Star */}
-      <div className="flex items-start gap-2 sm:gap-3 mb-3 sm:mb-4">
+      {/* Mobile: Full-width Icon/Image with overlay */}
+      <div className="sm:hidden relative w-full aspect-video bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+        {/* Icon/Image - Full size */}
+        <div className="w-32 h-32">
+          {renderIcon(true)}
+        </div>
+
+        {/* Overlay: Title, Subtitle, and Star */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-between p-4">
+          {/* Star in top-right */}
+          <div className="flex justify-end">
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+              className={`p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors ${shortcut.is_favorite ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-400 hover:text-yellow-400'}`}
+              title={shortcut.is_favorite ? "Remove from Favorites" : "Add to Favorites"}
+            >
+              <Star className={`w-5 h-5 ${shortcut.is_favorite ? 'fill-current' : ''}`} />
+            </button>
+          </div>
+
+          {/* Title and Subtitle at bottom */}
+          <div>
+            <h3 className="text-white font-bold text-base leading-tight uppercase truncate mb-1.5">{shortcut.name}</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-slate-300 bg-slate-950/80 backdrop-blur-sm px-2 py-1 rounded border border-white/10 tracking-wider uppercase truncate">
+                {subtitle}
+              </span>
+              {container && (
+                <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop: Horizontal layout (original) */}
+      <div className="hidden sm:flex items-start gap-3 sm:gap-4 p-4 sm:p-5 md:p-6">
         {/* Icon */}
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
+        <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
           {renderIcon()}
         </div>
 
         {/* Title and Subtitle */}
         <div className="min-w-0 flex-1">
-          <h3 className="text-white font-bold text-xs sm:text-sm md:text-lg leading-tight group-hover:text-blue-400 transition-colors uppercase line-clamp-2">{shortcut.name}</h3>
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
-            <span className="text-[9px] sm:text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 sm:px-2 py-0.5 rounded border border-white/5 tracking-wider uppercase truncate">
+          <h3 className="text-white font-bold text-sm sm:text-base md:text-lg leading-tight group-hover:text-blue-400 transition-colors uppercase truncate">{shortcut.name}</h3>
+          <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5">
+            <span className="text-[10px] sm:text-xs font-mono text-slate-400 bg-slate-950 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border border-white/5 tracking-wider uppercase truncate">
               {subtitle}
             </span>
             {container && (
@@ -732,70 +778,72 @@ function ShortcutCard({ shortcut, container, tailscaleIP, onEdit, onDelete, onSt
           </div>
         </div>
 
-        {/* Favorite Star - Always Visible */}
+        {/* Favorite Star */}
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
-          className={`p-1 sm:p-2 transition-colors shrink-0 ${shortcut.is_favorite ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-500 hover:text-yellow-400'}`}
+          className={`p-1.5 sm:p-2 transition-colors shrink-0 ${shortcut.is_favorite ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-500 hover:text-yellow-400'}`}
           title={shortcut.is_favorite ? "Remove from Favorites" : "Add to Favorites"}
         >
-          <Star className={`w-4 h-4 sm:w-5 sm:h-5 ${shortcut.is_favorite ? 'fill-current' : ''}`} />
+          <Star className={`w-5 h-5 ${shortcut.is_favorite ? 'fill-current' : ''}`} />
         </button>
       </div>
 
-      {/* Description - Hidden on very small screens */}
-      <p className="hidden sm:block text-slate-400 text-xs sm:text-sm leading-relaxed line-clamp-2 mb-4 sm:mb-6 flex-1">
-        {shortcut.description || 'Quickly access and manage this container instance.'}
-      </p>
+      {/* Description - Below image on mobile, in card on desktop */}
+      {shortcut.description && (
+        <p className="text-slate-400 text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3 px-4 sm:px-0 sm:mx-5 md:mx-6 mb-3 sm:mb-4 md:mb-6 flex-1">
+          {shortcut.description}
+        </p>
+      )}
 
-      {/* Action Buttons */}
-      <div className="flex items-center justify-between gap-2 mt-auto">
-        <div className="flex items-center gap-1 sm:gap-2">
+      {/* Action Buttons - Full width on mobile, inline on desktop */}
+      <div className="px-4 pb-4 sm:px-5 sm:pb-0 md:px-6 sm:flex sm:items-center sm:justify-between sm:gap-2 sm:mt-auto space-y-2 sm:space-y-0">
+        <div className="flex items-center gap-2 sm:gap-1.5">
           {container && (
-            <div className="flex gap-1">
+            <div className="flex gap-2 sm:gap-1.5 flex-1 sm:flex-initial">
               {isRunning ? (
                 <>
                   <button
                     onClick={(e) => { e.stopPropagation(); onStop(); }}
-                    className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/10"
+                    className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/10"
                     title="Stop Container"
                   >
-                    <Square className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="currentColor" />
+                    <Square className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto" fill="currentColor" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onRestart(); }}
-                    className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all border border-yellow-500/10"
+                    className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all border border-yellow-500/10"
                     title="Restart Container"
                   >
-                    <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto" />
                   </button>
                 </>
               ) : (
                 <button
                   onClick={(e) => { e.stopPropagation(); onStart(); }}
-                  className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/10"
+                  className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/10"
                   title="Start Container"
                 >
-                  <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="currentColor" />
+                  <Play className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto" fill="currentColor" />
                 </button>
               )}
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-0.5 sm:gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-2 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onEdit(); }}
-            className="p-1.5 sm:p-2 text-slate-500 hover:text-white transition-colors"
+            className="flex-1 sm:flex-initial p-2.5 sm:p-2 text-slate-400 hover:text-white transition-colors rounded-lg sm:rounded-none bg-slate-800/50 sm:bg-transparent"
             title="Edit Shortcut"
           >
-            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Settings className="w-4 h-4 mx-auto" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="p-1.5 sm:p-2 text-slate-500 hover:text-red-400 transition-colors"
+            className="flex-1 sm:flex-initial p-2.5 sm:p-2 text-slate-400 hover:text-red-400 transition-colors rounded-lg sm:rounded-none bg-slate-800/50 sm:bg-transparent"
             title="Delete Shortcut"
           >
-            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Trash2 className="w-4 h-4 mx-auto" />
           </button>
         </div>
       </div>
@@ -807,83 +855,142 @@ function ContainerCard({ container, isAdded, isFavorite, onQuickAdd, onToggleFav
   const isRunning = container.state === 'running';
   const ports = container.ports.map(p => p.public).filter(Boolean);
 
+  // Determine subtitle based on ports
+  let subtitle = 'No ports';
+  if (ports.length > 0) {
+    subtitle = ports.length === 1 ? `Port :${ports[0]}` : `${ports.length} ports`;
+  }
+
   return (
-    <div className="group relative bg-slate-900/60 border border-white/5 hover:border-green-500/30 rounded-3xl p-6 transition-all duration-300 h-full flex flex-col">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className={`w-3 h-3 rounded-full shrink-0 ${isRunning ? 'bg-green-500 shadow-[0_0_12px_rgba(22,163,74,0.4)]' : 'bg-slate-600'}`} />
-          <div className="min-w-0 flex-1">
-            <h3 className="text-white font-bold line-clamp-2 leading-tight">{container.name}</h3>
-            <p className="text-[10px] text-slate-500 font-mono truncate mt-0.5 opacity-60">{container.image}</p>
+    <div className="group relative bg-slate-900/60 border border-white/5 hover:border-green-500/30 rounded-2xl sm:rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-green-500/5 h-full flex flex-col">
+      {/* Mobile: Full-width Icon with overlay */}
+      <div className="sm:hidden relative w-full aspect-video bg-gradient-to-br from-green-500/20 to-blue-500/20 flex items-center justify-center">
+        {/* Server Icon - Full size */}
+        <Server className="w-32 h-32 text-green-400" />
+
+        {/* Overlay: Title, Subtitle, and Star */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-between p-4">
+          {/* Star in top-right */}
+          <div className="flex justify-end">
+            {isAdded ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+                className={`p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm transition-colors ${isFavorite ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-400 hover:text-yellow-400'}`}
+                title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              >
+                <Star className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); onQuickAdd(); }}
+                className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm text-slate-400 hover:text-yellow-400 transition-colors"
+                title="Quick Add to Favorites"
+              >
+                <Star className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Title and Subtitle at bottom */}
+          <div>
+            <h3 className="text-white font-bold text-base leading-tight uppercase truncate mb-1.5">{container.name}</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-slate-300 bg-slate-950/80 backdrop-blur-sm px-2 py-1 rounded border border-white/10 tracking-wider uppercase truncate">
+                {subtitle}
+              </span>
+              <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-6">
-        {ports.map((p, i) => (
-          <span key={i} className="text-[10px] bg-slate-800 text-slate-400 px-2 py-1 rounded-lg border border-white/5">
-            :{p}
-          </span>
-        ))}
-        {ports.length === 0 && <span className="text-[10px] text-slate-600 italic">No ports</span>}
+      {/* Desktop: Horizontal layout (original) */}
+      <div className="hidden sm:flex items-start gap-3 sm:gap-4 p-4 sm:p-5 md:p-6">
+        {/* Icon - Using Server icon for containers */}
+        <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500/20 to-blue-500/20 flex items-center justify-center border border-white/5 shrink-0 overflow-hidden">
+          <Server className="w-6 h-6 md:w-7 md:h-7 text-green-400 group-hover:scale-110 transition-transform duration-500" />
+        </div>
+
+        {/* Title and Subtitle */}
+        <div className="min-w-0 flex-1">
+          <h3 className="text-white font-bold text-sm sm:text-base md:text-lg leading-tight group-hover:text-green-400 transition-colors uppercase truncate">{container.name}</h3>
+          <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5">
+            <span className="text-[10px] sm:text-xs font-mono text-slate-400 bg-slate-950 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border border-white/5 tracking-wider uppercase truncate">
+              {subtitle}
+            </span>
+            <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
+          </div>
+        </div>
+
+        {/* Favorite Star */}
+        {isAdded ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+            className={`p-1.5 sm:p-2 transition-colors shrink-0 ${isFavorite ? 'text-yellow-400 hover:text-yellow-300' : 'text-slate-500 hover:text-yellow-400'}`}
+            title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+          >
+            <Star className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+          </button>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onQuickAdd(); }}
+            className="p-1.5 sm:p-2 transition-colors shrink-0 text-slate-500 hover:text-yellow-400"
+            title="Quick Add to Favorites"
+          >
+            <Star className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
-      <div className="mt-auto flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      {/* Description - Below image on mobile, in card on desktop */}
+      {container.description && (
+        <p className="text-slate-400 text-xs sm:text-sm leading-relaxed line-clamp-2 sm:line-clamp-3 px-4 sm:px-0 sm:mx-5 md:mx-6 mb-3 sm:mb-4 md:mb-6 flex-1">
+          {container.description}
+        </p>
+      )}
+
+      {/* Action Buttons - Full width on mobile, inline on desktop */}
+      <div className="px-4 pb-4 sm:px-5 sm:pb-0 md:px-6 sm:flex sm:items-center sm:justify-between sm:gap-2 sm:mt-auto space-y-2 sm:space-y-0">
+        <div className="flex items-center gap-2 sm:gap-1.5">
           {/* Launch button - only show if container has ports */}
           {ports.length > 0 && (
             <button
               onClick={() => window.open(`http://${window.location.hostname}:${ports[0]}`, '_blank')}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95"
+              className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-500 text-white px-3 py-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
               title="Launch"
             >
-              <ExternalLink className="w-3.5 h-3.5" /> Launch
+              <ExternalLink className="w-3.5 h-3.5" /> <span className="sm:hidden">Launch</span><span className="hidden sm:inline">Launch</span>
             </button>
           )}
 
+          {/* Start/Stop buttons */}
           {isRunning ? (
             <button
               onClick={onStop}
-              className="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/10 active:scale-95"
-              title="Stop"
+              className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/10"
+              title="Stop Container"
             >
-              <Square className="w-3.5 h-3.5" fill="currentColor" />
+              <Square className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto" fill="currentColor" />
             </button>
           ) : (
             <button
               onClick={onStart}
-              className="p-2 rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/10 active:scale-95"
-              title="Start"
+              className="flex-1 sm:flex-initial p-2.5 sm:p-2 rounded-lg sm:rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white transition-all border border-green-500/10"
+              title="Start Container"
             >
-              <Play className="w-3.5 h-3.5" fill="currentColor" />
+              <Play className="w-4 h-4 sm:w-3.5 sm:h-3.5 mx-auto" fill="currentColor" />
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {!isAdded ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickAdd(); }}
-              className="p-2 text-slate-500 hover:text-accent transition-colors"
-              title="Add to Favorites"
-            >
-              <Star className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
-              className={`p-2 transition-colors ${isFavorite ? 'text-accent hover:text-accent/80' : 'text-slate-500 hover:text-white'}`}
-              title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-            >
-              <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-            </button>
-          )}
+        {/* Edit button - Always visible on mobile, hover on desktop */}
+        <div className="flex items-center gap-2 sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
             onClick={onCustomize}
-            className="p-2 text-slate-500 hover:text-white transition-colors"
-            title="Customize"
+            className="flex-1 sm:flex-initial p-2.5 sm:p-2 text-slate-400 hover:text-white transition-colors rounded-lg sm:rounded-none bg-slate-800/50 sm:bg-transparent"
+            title="Customize Shortcut"
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="w-4 h-4 mx-auto" />
           </button>
         </div>
       </div>
@@ -904,6 +1011,8 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
   });
   const [activeTab, setActiveTab] = useState('icon'); // 'icon', 'url', 'upload'
   const [selectedFile, setSelectedFile] = useState(null);
+  const [urlError, setUrlError] = useState('');
+  const [iconUrlError, setIconUrlError] = useState('');
 
   useEffect(() => {
     if (shortcut) {
@@ -933,6 +1042,10 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Clear previous errors
+    setUrlError('');
+    setIconUrlError('');
+
     // Validation
     if (formData.type === 'port') {
       // Port is optional for containers that don't expose ports
@@ -943,6 +1056,7 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
     } else {
       // URL is required for URL-type shortcuts
       if (!formData.url || !isValidUrl(formData.url)) {
+        setUrlError('This is not a valid URL. Please enter a valid URL like example.com or https://example.com');
         onError('Invalid URL', 'Please enter a valid URL.\n\nSupported formats:\n• example.com\n• www.example.com\n• http://example.com\n• https://example.com');
         return;
       }
@@ -951,14 +1065,19 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
     // Validate image URL if using URL tab
     if (activeTab === 'url' && formData.icon) {
       if (!isValidUrl(formData.icon)) {
+        setIconUrlError('This is not a valid URL. Please enter a valid image URL like https://example.com/image.png');
         onError('Invalid Image URL', 'Please enter a valid image URL.\n\nExample: https://example.com/image.png');
         return;
       }
     }
 
     const data = new FormData();
-    data.append('name', formData.name);
-    data.append('description', formData.description);
+    data.append('name', formData.name.trim());
+    // Only add description if it's not empty after cleaning
+    const cleanedDesc = cleanDescription(formData.description);
+    if (cleanedDesc) {
+      data.append('description', cleanedDesc);
+    }
 
     if (formData.type === 'port') {
       // Only add port if it's provided
@@ -1085,18 +1204,33 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
               min={formData.type === 'port' ? '1' : undefined}
               max={formData.type === 'port' ? '65535' : undefined}
               value={formData.type === 'port' ? formData.port : formData.url}
-              onChange={e => setFormData({ ...formData, [formData.type]: e.target.value })}
+              onChange={e => {
+                setFormData({ ...formData, [formData.type]: e.target.value });
+                if (formData.type === 'url') setUrlError(''); // Clear error on change
+              }}
+              onBlur={e => {
+                if (formData.type === 'url' && e.target.value && !isValidUrl(e.target.value)) {
+                  setUrlError('This is not a valid URL. Please enter a valid URL like example.com or https://example.com');
+                } else {
+                  setUrlError('');
+                }
+              }}
               placeholder={formData.type === 'port' ? '8080 (leave empty if no port)' : 'example.com or https://example.com'}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
+              className={`w-full bg-slate-800 border ${urlError ? 'border-red-500' : 'border-white/10'} rounded-xl px-4 py-3 focus:outline-none focus:ring-2 ${urlError ? 'focus:ring-red-500' : 'focus:ring-blue-500'} transition-all text-white`}
             />
             {formData.type === 'port' && (
               <p className="text-xs text-slate-500 pl-1">
                 Leave empty for containers that don't expose ports
               </p>
             )}
-            {formData.type === 'url' && (
+            {formData.type === 'url' && !urlError && (
               <p className="text-xs text-slate-500 pl-1">
                 Supports: example.com, www.example.com, http://example.com, https://example.com
+              </p>
+            )}
+            {urlError && (
+              <p className="text-xs text-red-400 pl-1 flex items-center gap-1">
+                <span>⚠</span> {urlError}
               </p>
             )}
           </div>
@@ -1179,16 +1313,33 @@ function ShortcutModal({ isOpen, onClose, onSave, shortcut, containers, tailscal
 
               {activeTab === 'url' && (
                 <div className="w-full space-y-3">
-                  <div className="flex items-center gap-3 bg-slate-800 border border-white/10 rounded-xl px-4 py-3">
+                  <div className={`flex items-center gap-3 bg-slate-800 border ${iconUrlError ? 'border-red-500' : 'border-white/10'} rounded-xl px-4 py-3`}>
                     <LinkIcon className="w-5 h-5 text-slate-500" />
                     <input
                       className="bg-transparent flex-1 focus:outline-none text-white text-sm"
                       placeholder="Paste image link here..."
                       value={formData.icon?.startsWith('http') ? formData.icon : ''}
-                      onChange={e => setFormData({ ...formData, icon: e.target.value })}
+                      onChange={e => {
+                        setFormData({ ...formData, icon: e.target.value });
+                        setIconUrlError(''); // Clear error on change
+                      }}
+                      onBlur={e => {
+                        if (e.target.value && !isValidUrl(e.target.value)) {
+                          setIconUrlError('This is not a valid URL. Please enter a valid image URL like https://example.com/image.png');
+                        } else {
+                          setIconUrlError('');
+                        }
+                      }}
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500 pl-1 italic">Prefer direct links to PNG/SVG assets.</p>
+                  {!iconUrlError && (
+                    <p className="text-[10px] text-slate-500 pl-1 italic">Prefer direct links to PNG/SVG assets.</p>
+                  )}
+                  {iconUrlError && (
+                    <p className="text-xs text-red-400 pl-1 flex items-center gap-1">
+                      <span>⚠</span> {iconUrlError}
+                    </p>
+                  )}
                 </div>
               )}
 

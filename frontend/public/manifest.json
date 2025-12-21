@@ -28,5 +28,20 @@
     }
   ],
   "categories": ["utilities", "productivity"],
-  "screenshots": []
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "DockerDash mobile view showing container shortcuts"
+    },
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "DockerDash desktop view with container management"
+    }
+  ]
 }

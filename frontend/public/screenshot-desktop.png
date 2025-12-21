@@ -1,0 +1,5 @@
+<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="1080" fill="#0f172a"/>
+  <text x="960" y="540" font-family="Arial" font-size="48" fill="#3b82f6" text-anchor="middle">DockerDash Desktop</text>
+</svg>
+

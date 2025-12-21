@@ -37,6 +37,12 @@ const isValidUrl = (url) => {
   }
 };
 
+// Clean description: trim and remove double spaces
+const cleanDescription = (desc) => {
+  if (!desc || typeof desc !== 'string') return '';
+  return desc.trim().replace(/\s+/g, ' ');
+};
+
 const isValidPort = (port) => {
   if (!port) return false;
   const portNum = parseInt(port, 10);
@@ -258,12 +264,22 @@ app.get('/api/containers', async (req, res) => {
     const containers = (await docker.listContainers({ all: true })) || [];
     const formatted = containers.map(c => {
       if (!c) return null;
+
+      // Extract description from Docker labels (common label keys)
+      const labels = c.Labels || {};
+      const description = labels['org.opencontainers.image.description'] ||
+        labels['description'] ||
+        labels['com.docker.compose.project'] ||
+        labels['maintainer'] ||
+        '';
+
       return {
         id: c.Id,
         name: (c.Names && c.Names[0]) ? c.Names[0].replace('/', '') : 'unknown',
         image: c.Image,
         state: c.State,
         status: c.Status,
+        description: description,
         ports: (c.Ports || []).map(p => ({
           private: p?.PrivatePort,
           public: p?.PublicPort,
@@ -329,8 +345,8 @@ app.get('/api/shortcuts', (req, res) => {
 app.post('/api/shortcuts', upload.single('image'), (req, res) => {
   const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
 
-  if (!name) {
-    return res.status(400).json({ error: 'Name is required' });
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Name is required and cannot be empty' });
   }
 
   // At least one of port or url should be provided (but port can be empty for containers without ports)
@@ -347,7 +363,7 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
   let finalUrl = null;
   if (url) {
     if (!isValidUrl(url)) {
-      return res.status(400).json({ error: 'Invalid URL format' });
+      return res.status(400).json({ error: 'Invalid URL format. Please enter a valid URL like example.com or https://example.com' });
     }
     finalUrl = normalizeUrl(url);
   }
@@ -358,10 +374,13 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
     iconValue = 'uploads/' + req.file.filename;
   } else if (icon && icon.includes('http')) {
     if (!isValidUrl(icon)) {
-      return res.status(400).json({ error: 'Invalid icon URL format' });
+      return res.status(400).json({ error: 'Invalid icon URL format. Please enter a valid image URL like https://example.com/image.png' });
     }
     iconValue = normalizeUrl(icon);
   }
+
+  // Clean and validate description
+  const cleanedDescription = cleanDescription(description);
 
   const finalPort = port ? parseInt(port) : null;
   const finalFavorite = is_favorite === undefined ? 1 : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
@@ -371,11 +390,11 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
     const stmt = db.prepare(
       'INSERT INTO shortcuts (name, description, icon, port, url, container_id, is_favorite, use_tailscale) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    const result = stmt.run(name, description || '', iconValue, finalPort, finalUrl, container_id || null, finalFavorite, finalUseTailscale);
-    res.json({ id: result.lastInsertRowid, name, description, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite, use_tailscale: finalUseTailscale });
+    const result = stmt.run(name.trim(), cleanedDescription, iconValue, finalPort, finalUrl, container_id || null, finalFavorite, finalUseTailscale);
+    res.json({ id: result.lastInsertRowid, name: name.trim(), description: cleanedDescription, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite, use_tailscale: finalUseTailscale });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to create shortcut' });
+    res.status(500).json({ error: 'Failed to create shortcut. Please try again.' });
   }
 });
 
@@ -383,6 +402,10 @@ app.post('/api/shortcuts', upload.single('image'), (req, res) => {
 app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
   const { id } = req.params;
   const { name, description, icon, port, url, container_id, is_favorite, use_tailscale } = req.body;
+
+  if (name && !name.trim()) {
+    return res.status(400).json({ error: 'Name cannot be empty' });
+  }
 
   // Validate port if provided
   if (port && !isValidPort(port)) {
@@ -393,7 +416,7 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
   let finalUrl = null;
   if (url) {
     if (!isValidUrl(url)) {
-      return res.status(400).json({ error: 'Invalid URL format' });
+      return res.status(400).json({ error: 'Invalid URL format. Please enter a valid URL like example.com or https://example.com' });
     }
     finalUrl = normalizeUrl(url);
   }
@@ -404,10 +427,13 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
     iconValue = 'uploads/' + req.file.filename;
   } else if (icon && icon.includes('http')) {
     if (!isValidUrl(icon)) {
-      return res.status(400).json({ error: 'Invalid icon URL format' });
+      return res.status(400).json({ error: 'Invalid icon URL format. Please enter a valid image URL like https://example.com/image.png' });
     }
     iconValue = normalizeUrl(icon);
   }
+
+  // Clean description
+  const cleanedDescription = cleanDescription(description);
 
   const finalPort = port ? parseInt(port) : null;
   const finalFavorite = is_favorite === undefined ? undefined : (is_favorite === 'true' || is_favorite === true || is_favorite === 1 ? 1 : 0);
@@ -415,7 +441,7 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
 
   try {
     let sql = 'UPDATE shortcuts SET name=?, description=?, icon=?, port=?, url=?, container_id=?, updated_at=CURRENT_TIMESTAMP';
-    const params = [name, description, iconValue, finalPort, finalUrl, container_id];
+    const params = [name ? name.trim() : name, cleanedDescription, iconValue, finalPort, finalUrl, container_id];
 
     if (finalFavorite !== undefined) {
       sql += ', is_favorite=?';
@@ -432,10 +458,10 @@ app.put('/api/shortcuts/:id', upload.single('image'), (req, res) => {
 
     const stmt = db.prepare(sql);
     stmt.run(...params);
-    res.json({ id, name, description, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite, use_tailscale: finalUseTailscale });
+    res.json({ id, name: name ? name.trim() : name, description: cleanedDescription, icon: iconValue, port: finalPort, url: finalUrl, container_id, is_favorite: finalFavorite, use_tailscale: finalUseTailscale });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to update shortcut' });
+    res.status(500).json({ error: 'Failed to update shortcut. Please try again.' });
   }
 });
 
