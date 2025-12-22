@@ -75,6 +75,16 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    position INTEGER DEFAULT 0,
+    is_collapsed INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
 // Robust Migration Check
 const tableInfo = db.pragma('table_info(shortcuts)');
 
@@ -106,7 +116,26 @@ if (!tableInfo.find(c => c.name === 'is_favorite')) {
 if (!tableInfo.find(c => c.name === 'use_tailscale')) {
   try {
     db.exec('ALTER TABLE shortcuts ADD COLUMN use_tailscale INTEGER DEFAULT 0');
-    console.log("Migrated: Added use_tailscale column");
+  } catch (err) { console.error(err); }
+}
+
+// 5. Check for 'position' column
+if (!tableInfo.find(c => c.name === 'position')) {
+  try {
+    db.exec('ALTER TABLE shortcuts ADD COLUMN position INTEGER DEFAULT 0');
+    // Set initial positions based on current order (by name)
+    const shortcuts = db.prepare('SELECT id FROM shortcuts ORDER BY name').all();
+    const updateStmt = db.prepare('UPDATE shortcuts SET position = ? WHERE id = ?');
+    shortcuts.forEach((shortcut, index) => {
+      updateStmt.run(index, shortcut.id);
+    });
+  } catch (err) { console.error(err); }
+}
+
+// 6. Check for 'section_id' column
+if (!tableInfo.find(c => c.name === 'section_id')) {
+  try {
+    db.exec('ALTER TABLE shortcuts ADD COLUMN section_id INTEGER');
   } catch (err) { console.error(err); }
 }
 
@@ -190,7 +219,6 @@ async function getTailscaleIP() {
     const { stdout } = await execAsync('tailscale ip -4 2>/dev/null');
     const ip = stdout.trim();
     if (ip && /^100\.\d+\.\d+\.\d+$/.test(ip)) {
-      console.log('Tailscale IP detected via command:', ip);
       return ip;
     }
   } catch (err) {
@@ -202,7 +230,6 @@ async function getTailscaleIP() {
     const { stdout } = await execAsync('ip addr show 2>/dev/null || ifconfig 2>/dev/null');
     const match = stdout.match(/inet (100\.\d+\.\d+\.\d+)/);
     if (match) {
-      console.log('Tailscale IP detected via network interface:', match[1]);
       return match[1];
     }
   } catch (err) {
@@ -216,7 +243,6 @@ async function getTailscaleIP() {
     const ips = stdout.trim().split(/\s+/);
     const tailscaleIP = ips.find(ip => /^100\.\d+\.\d+\.\d+$/.test(ip));
     if (tailscaleIP) {
-      console.log('Tailscale IP detected via hostname -I:', tailscaleIP);
       return tailscaleIP;
     }
   } catch (err) {
@@ -231,7 +257,6 @@ async function getTailscaleIP() {
       // Filter out broadcast addresses (ending in .255)
       const validIP = matches.find(ip => !ip.endsWith('.255') && !ip.endsWith('.0'));
       if (validIP) {
-        console.log('Tailscale IP detected via /proc/net/fib_trie:', validIP);
         return validIP;
       }
     }
@@ -239,7 +264,6 @@ async function getTailscaleIP() {
     // /proc/net/fib_trie not available
   }
 
-  console.log('No Tailscale IP detected');
   return null;
 }
 
@@ -273,6 +297,25 @@ app.get('/api/containers', async (req, res) => {
         labels['maintainer'] ||
         '';
 
+      // Deduplicate ports - same public port can appear multiple times (IPv4/IPv6, TCP/UDP)
+      const allPorts = (c.Ports || [])
+        .filter(p => p && p.PublicPort)
+        .map(p => ({
+          private: p.PrivatePort,
+          public: p.PublicPort,
+          type: p.Type
+        }));
+
+      // Keep only unique public ports (dedupe by public port number)
+      const uniquePorts = [];
+      const seenPublicPorts = new Set();
+      for (const port of allPorts) {
+        if (!seenPublicPorts.has(port.public)) {
+          seenPublicPorts.add(port.public);
+          uniquePorts.push(port);
+        }
+      }
+
       return {
         id: c.Id,
         name: (c.Names && c.Names[0]) ? c.Names[0].replace('/', '') : 'unknown',
@@ -280,11 +323,7 @@ app.get('/api/containers', async (req, res) => {
         state: c.State,
         status: c.Status,
         description: description,
-        ports: (c.Ports || []).map(p => ({
-          private: p?.PrivatePort,
-          public: p?.PublicPort,
-          type: p?.Type
-        })).filter(p => p && p.public)
+        ports: uniquePorts
       };
     }).filter(Boolean);
     res.json(formatted);
@@ -334,7 +373,12 @@ app.post('/api/containers/:id/restart', async (req, res) => {
 // Get all shortcuts
 app.get('/api/shortcuts', (req, res) => {
   try {
-    const shortcuts = db.prepare('SELECT * FROM shortcuts ORDER BY name').all();
+    const shortcuts = db.prepare(`
+      SELECT s.*, sec.name as section_name
+      FROM shortcuts s
+      LEFT JOIN sections sec ON s.section_id = sec.id
+      ORDER BY s.section_id ASC, s.position ASC, s.name ASC
+    `).all();
     res.json(shortcuts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch shortcuts' });
@@ -479,6 +523,30 @@ app.post('/api/shortcuts/:id/favorite', (req, res) => {
   }
 });
 
+// Reorder shortcuts
+app.put('/api/shortcuts/reorder', (req, res) => {
+  const { shortcuts } = req.body; // Array of { id, position }
+
+  if (!Array.isArray(shortcuts)) {
+    return res.status(400).json({ error: 'Invalid request: shortcuts must be an array' });
+  }
+
+  try {
+    const updateStmt = db.prepare('UPDATE shortcuts SET position = ? WHERE id = ?');
+    const transaction = db.transaction((items) => {
+      for (const item of items) {
+        updateStmt.run(item.position, item.id);
+      }
+    });
+
+    transaction(shortcuts);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to reorder shortcuts:', err);
+    res.status(500).json({ error: 'Failed to reorder shortcuts' });
+  }
+});
+
 // Delete a shortcut
 app.delete('/api/shortcuts/:id', (req, res) => {
   const { id } = req.params;
@@ -487,6 +555,127 @@ app.delete('/api/shortcuts/:id', (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete shortcut' });
+  }
+});
+
+// ===== SECTIONS API =====
+
+// Get all sections
+app.get('/api/sections', (req, res) => {
+  try {
+    const sections = db.prepare('SELECT * FROM sections ORDER BY position ASC').all();
+    res.json(sections);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch sections' });
+  }
+});
+
+// Create a section
+app.post('/api/sections', (req, res) => {
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Section name is required' });
+  }
+
+  try {
+    // Get the highest position
+    const maxPos = db.prepare('SELECT MAX(position) as max FROM sections').get();
+    const position = (maxPos.max || -1) + 1;
+
+    const result = db.prepare(
+      'INSERT INTO sections (name, position) VALUES (?, ?)'
+    ).run(name.trim(), position);
+
+    res.json({ id: result.lastInsertRowid, name: name.trim(), position, is_collapsed: 0 });
+  } catch (error) {
+    console.error('Failed to create section:', error);
+    res.status(500).json({ error: 'Failed to create section' });
+  }
+});
+
+// Update a section
+app.put('/api/sections/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, is_collapsed } = req.body;
+
+  try {
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name.trim());
+    }
+
+    if (is_collapsed !== undefined) {
+      updates.push('is_collapsed = ?');
+      values.push(is_collapsed ? 1 : 0);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(id);
+    db.prepare(`UPDATE sections SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to update section:', error);
+    res.status(500).json({ error: 'Failed to update section' });
+  }
+});
+
+// Reorder sections
+app.put('/api/sections/reorder', (req, res) => {
+  const { sections } = req.body;
+
+  if (!Array.isArray(sections)) {
+    return res.status(400).json({ error: 'Invalid request: sections must be an array' });
+  }
+
+  try {
+    const updateStmt = db.prepare('UPDATE sections SET position = ? WHERE id = ?');
+    const transaction = db.transaction((items) => {
+      for (const item of items) {
+        updateStmt.run(item.position, item.id);
+      }
+    });
+
+    transaction(sections);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to reorder sections:', err);
+    res.status(500).json({ error: 'Failed to reorder sections' });
+  }
+});
+
+// Delete a section
+app.delete('/api/sections/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    // Remove section_id from shortcuts in this section
+    db.prepare('UPDATE shortcuts SET section_id = NULL WHERE section_id = ?').run(id);
+    // Delete the section
+    db.prepare('DELETE FROM sections WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete section:', error);
+    res.status(500).json({ error: 'Failed to delete section' });
+  }
+});
+
+// Update shortcut's section
+app.put('/api/shortcuts/:id/section', (req, res) => {
+  const { id } = req.params;
+  const { section_id } = req.body;
+
+  try {
+    db.prepare('UPDATE shortcuts SET section_id = ? WHERE id = ?').run(section_id || null, id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to update shortcut section:', error);
+    res.status(500).json({ error: 'Failed to update shortcut section' });
   }
 });
 
