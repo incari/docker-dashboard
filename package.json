@@ -7,7 +7,10 @@
     "start": "node src/server.js",
     "dev:backend": "node --watch src/server.js",
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "docker:build": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dashboard:latest .",
+    "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/incari/docker-dashboard:latest --push .",
+    "docker:login": "gh auth token | docker login ghcr.io -u incari --password-stdin"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",
